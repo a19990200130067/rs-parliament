@@ -1,0 +1,19 @@
+[package]
+name = "rs-parliament"
+version = "0.1.0"
+authors = ["Kaiyuan Zhang <John_zh_007@yahoo.com>"]
+
+[lib]
+name = "rs_parliament"
+path = "src/lib.rs"
+crate-type = ["staticlib"]
+
+[[bin]]
+name = "lock_server"
+path = "src/lockserver.rs"
+
+[[bin]]
+name = "lock_client"
+path = "src/lockclient.rs"
+
+[dependencies]
