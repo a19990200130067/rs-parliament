@@ -17,3 +17,10 @@ name = "lock_client"
 path = "src/lockclient.rs"
 
 [dependencies]
+libc = "*"
+serde_derive = "*"
+serde = "1.0"
+serde_json = "*"
+hex = "0.3"
+openssl-sys = "0.9"
+openssl = "0.10"
