@@ -6,7 +6,7 @@ authors = ["Kaiyuan Zhang <John_zh_007@yahoo.com>"]
 [lib]
 name = "rs_parliament"
 path = "src/lib.rs"
-crate-type = ["staticlib"]
+crate-type = ["rlib"]
 
 [[bin]]
 name = "lock_server"

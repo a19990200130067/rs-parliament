@@ -1,15 +1,8 @@
-extern crate openssl;
-extern crate hex;
- 
-use openssl::sha;
+extern crate rs_parliament;
+use rs_parliament::*;
 
 fn main() {
     println!("Starting lock server");
-    let mut hasher = sha::Sha256::new();
- 
-    hasher.update(b"Hello, ");
-    hasher.update(b"world");
- 
-    let hash = hasher.finish();
-    println!("Hashed \"Hello, world\" to {}", hex::encode(hash));
+    //let addr: Addr = Addr { addr: "127.0.0.1", port: 8080 };
+    //let recv = UdpRecver::bind(addr);
 }
