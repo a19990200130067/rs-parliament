@@ -47,7 +47,7 @@ pub struct UdpRecver<T> {
 impl<T> UdpRecver<T> {
     pub fn bind(addr: Addr) -> Self {
         let sock = UdpSocket::bind(format!("{}:{}", addr.addr, addr.port)).expect("failed to bind");
-        sock.set_nonblocking(true);
+        sock.set_nonblocking(true).expect("failed to set socket non_blocking");
         unsafe {
             let optval: libc::c_int = 1;
             let ret = libc::setsockopt(sock.as_raw_fd(),
@@ -100,7 +100,7 @@ impl<T> MsgSender for UdpSender<T> where
 
     fn connect(addr: Addr) -> Self {
         let sock = UdpSocket::bind("0.0.0.0:0").expect("failed to create socket");
-        sock.set_nonblocking(true);
+        sock.set_nonblocking(true).expect("failed to set socket non_blocking");
         unsafe {
             let optval: libc::c_int = 1;
             let ret = libc::setsockopt(sock.as_raw_fd(),

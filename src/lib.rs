@@ -5,4 +5,5 @@ extern crate serde_json;
 extern crate libc;
 
 pub mod statemachine;
+pub mod messages;
 pub mod messaging;
