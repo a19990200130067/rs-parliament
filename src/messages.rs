@@ -56,7 +56,7 @@ pub struct P2a<CmdT> {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct P2b<CmdT> {
+pub struct P2b {
     pub sender: ServerID,
     pub ballot: Ballot,
 }
