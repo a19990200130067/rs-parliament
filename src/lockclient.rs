@@ -11,7 +11,7 @@ struct Foo {
 
 fn main() {
     println!("Starting lock client");
-    let addr: Addr = Addr { addr: "127.0.0.1", port: 8080 };
+    let addr: Addr = Addr { addr: "127.0.0.1".to_string(), port: 8080 };
     let mut send = UdpSender::<Foo>::connect(addr);
     thread::sleep(time::Duration::from_millis(100));
     println!("{:?}", send.send(&Foo { a: 90 }));

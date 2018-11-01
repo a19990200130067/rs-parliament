@@ -4,9 +4,9 @@ use std::os::unix::io::AsRawFd;
 use libc::c_int;
 use std::mem;
 
-#[derive(Clone, Copy)]
-pub struct Addr<'a> {
-    pub addr: &'a str,
+#[derive(Clone)]
+pub struct Addr {
+    pub addr: String,
     pub port: u16,
 }
 

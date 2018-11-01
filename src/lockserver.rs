@@ -10,7 +10,7 @@ struct Foo {
 
 fn main() {
     println!("Starting lock server");
-    let addr: Addr = Addr { addr: "127.0.0.1", port: 8080 };
+    let addr: Addr = Addr { addr: "127.0.0.1".to_string(), port: 8080 };
     let mut recv = UdpRecver::<Foo>::bind(addr);
     loop {
         recv.try_recv().map(|msg| {
