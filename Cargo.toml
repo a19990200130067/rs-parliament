@@ -17,6 +17,8 @@ name = "lock_client"
 path = "src/lockclient.rs"
 
 [dependencies]
+rand = "*"
+zmq = "0.8"
 libc = "*"
 serde_derive = "*"
 serde = "1.0"

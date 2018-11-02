@@ -1,14 +1,24 @@
+extern crate zmq;
+
 use std::net::UdpSocket;
 use std::marker::PhantomData;
 use std::os::unix::io::AsRawFd;
 use libc::c_int;
 use std::mem;
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize, Hash)]
 pub struct Addr {
     pub addr: String,
     pub port: u16,
 }
+
+impl PartialEq for Addr {
+    fn eq(&self, other: &Addr) -> bool {
+        self.addr == other.addr && self.port == other.port
+    }
+}
+
+impl Eq for Addr {}
 
 pub trait MsgRecver {
     type Message: serde::Serialize + serde::de::DeserializeOwned;
@@ -124,5 +134,68 @@ impl<T> MsgSender for UdpSender<T> where
                 if size == s.len() { Ok(()) } else { Err(-1) },
             Err(e) => e.raw_os_error().map_or(Err(-1), |eno| Err(eno))
         }
+    }
+}
+
+
+pub struct ZmqServer<'a, T> {
+    _ctx: &'a zmq::Context,
+    socket: zmq::Socket,
+    msg_type: PhantomData<T>,
+}
+
+impl<'a, T> ZmqServer<'a, T> {
+    pub fn bind(ctx: &'a zmq::Context, addr: &Addr) -> Self {
+        let sock = ctx.socket(zmq::ROUTER).expect("failed to create socket");
+        let tcp_str = format!("tcp://{}:{}", addr.addr.as_str(), addr.port);
+        sock.bind(tcp_str.as_str()).expect("failed to bind");
+        ZmqServer {
+            _ctx: ctx,
+            socket: sock,
+            msg_type: PhantomData,
+        }
+    }
+}
+
+impl<'a, T> MsgRecver for ZmqServer<'a, T> where
+    T: serde::Serialize + serde::de::DeserializeOwned {
+    type Message = T;
+    
+    fn try_recv_str(&mut self) -> Option<Vec<u8>> {
+        self.socket.recv_multipart(zmq::DONTWAIT).ok().and_then(|mut msg| {
+            if msg.len() == 3 {
+                Some(msg.swap_remove(2).clone())
+            } else {
+                None
+            }
+        })
+    }
+
+    fn get_io_fds(&self) -> Vec<c_int> {
+        Vec::new()
+    }
+}
+
+pub struct ZmqClient<T> {
+    socket: zmq::Socket,
+    msg_type: PhantomData<T>,
+}
+
+impl<T> MsgSender for ZmqClient<T> where
+    T: serde::Serialize + serde::de::DeserializeOwned {
+    type Message = T;
+    fn connect(addr: Addr) -> Self {
+        let ctx = zmq::Context::new();
+        let sock = ctx.socket(zmq::ROUTER).expect("failed to create socket");
+        let tcp_str = format!("tcp://{}:{}", addr.addr.as_str(), addr.port);
+        sock.connect(tcp_str.as_str()).expect("failed to bind");
+        ZmqClient {
+            socket: sock,
+            msg_type: PhantomData,
+        }
+    }
+
+    fn send_str(&mut self, s: &[u8]) -> Result<(), i32> {
+        self.socket.send(s, zmq::DONTWAIT).map_err(|e| e as i32)
     }
 }

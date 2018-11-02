@@ -2,13 +2,12 @@ extern crate serde;
 
 use std::default::Default;
 
-pub trait StateMachine {
+pub trait StateMachine : Default{
     type Op;
     type Result;
-    type State: Default;
 
-    fn init_state() -> Self::State {
+    fn init_state() -> Self {
         Default::default()
     }
-    fn apply_op(state: &mut Self::State, op: &Self::Op) -> Self::Result;
+    fn apply_op(&mut self, op: &Self::Op) -> Self::Result;
 }

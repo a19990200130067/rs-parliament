@@ -1,25 +1,66 @@
-pub type ClientID = u64;
+use std::cmp::Ordering;
+use messaging::Addr;
+
+pub type ClientID = Addr;
 pub type ServerID = u64;
 
-#[derive(Eq, PartialEq, PartialOrd, Ord, Serialize, Deserialize, Clone)]
+#[derive(Eq, PartialEq, Serialize, Deserialize, Clone)]
 pub struct Ballot {
     pub server: ServerID,
     pub idx: u64,
+    is_bot: bool, 
 }
 
 impl Ballot {
     pub fn next(&self) -> Option<Self> {
         if self.idx != std::u64::MAX {
-            Some(Ballot { server: self.server, idx: self.idx + 1 })
+            Some(Ballot { server: self.server, idx: self.idx + 1, is_bot: false })
         } else {
             None
+        }
+    }
+    
+    pub fn zero(self_id: ServerID) -> Self {
+        Ballot { server: self_id, idx: 0, is_bot: false }
+    }
+
+    pub fn bot(self_id: ServerID) -> Self {
+        Ballot { server: self_id, idx: 0, is_bot: true }
+    }
+}
+
+impl PartialOrd for Ballot {
+    fn partial_cmp(&self, other: &Ballot) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Ballot {
+    fn cmp(&self, other: &Ballot) -> Ordering {
+        if self.is_bot {
+            if other.is_bot {
+                Ordering::Equal
+            } else {
+                Ordering::Less
+            }
+        } else {
+            if other.is_bot {
+                Ordering::Greater
+            } else {
+                let idx_cmp = self.idx.cmp(&other.idx);
+                if idx_cmp == Ordering::Equal {
+                    self.server.cmp(&other.server)
+                } else {
+                    idx_cmp
+                }
+            }
         }
     }
 }
 
 #[derive(Serialize, Deserialize)]
 pub enum Message<CmdT, ResultT> {
-    Request { cmd: CmdT },
+    Request { cid: ClientID, cmd: CmdT },
     Response { cid: ClientID, result: ResultT },
 
     Propose { slot: u64, cmd: CmdT },
