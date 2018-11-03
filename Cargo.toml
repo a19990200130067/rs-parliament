@@ -13,6 +13,18 @@ name = "lock_server"
 path = "src/lockserver.rs"
 
 [[bin]]
+name = "lock_leader"
+path = "src/lock_leader.rs"
+
+[[bin]]
+name = "lock_acceptor"
+path = "src/lock_acceptor.rs"
+
+[[bin]]
+name = "lock_replica"
+path = "src/lock_replica.rs"
+
+[[bin]]
 name = "lock_client"
 path = "src/lockclient.rs"
 
@@ -26,3 +38,4 @@ serde_json = "*"
 hex = "0.3"
 openssl-sys = "0.9"
 openssl = "0.10"
+clap = "2.32.0"

@@ -7,8 +7,16 @@ pub struct Acceptor<CmdT> {
     server_id: ServerID,
 }
 
-impl <CmdT> Acceptor<CmdT> where
+impl<CmdT> Acceptor<CmdT> where
     CmdT: serde::Serialize + serde::de::DeserializeOwned + Clone {
+    pub fn new(my_id: ServerID) -> Self {
+        Acceptor {
+            ballot: Ballot::bot(my_id),
+            accepted: HashMap::new(),
+            server_id: my_id,
+        }
+    }
+
     pub fn remove_before(&mut self, slot: u64) {
         // remove all accepeted values in range [0, slot)
         self.accepted = std::mem::replace(&mut self.accepted, HashMap::new()).into_iter().filter(|(k, _v)| {

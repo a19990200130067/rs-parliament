@@ -18,6 +18,19 @@ pub struct Replica<'a, S: StateMachine> {
 impl<'a, S> Replica<'a, S> where
     S: StateMachine,
     S::Op: Clone + Eq + Hash {
+
+    pub fn new(leaders: &'a HashSet<ServerID>) -> Self {
+        Replica {
+            state: S::init_state(),
+            slot_in: 1,
+            slot_out: 1,
+            requests: HashSet::new(),
+            proposals: HashMap::new(),
+            log: HashMap::new(),
+            leaders: leaders,
+        }
+    }
+
     pub fn handle_msg(&mut self, msg: &Message<S::Op, S::Result>) 
                       -> (Vec<(ServerID, Message<S::Op, S::Result>)>, Vec<(ClientID, Message<S::Op, S::Result>)>) {
         let mut to_server: Vec<(ServerID, Message<S::Op, S::Result>)> = Vec::new();

@@ -12,6 +12,15 @@ pub struct Addr {
     pub port: u16,
 }
 
+impl Addr {
+    pub fn new(a: &str, p: u16) -> Self {
+        Addr {
+            addr: a.to_string(),
+            port: p,
+        }
+    }
+}
+
 impl PartialEq for Addr {
     fn eq(&self, other: &Addr) -> bool {
         self.addr == other.addr && self.port == other.port
@@ -36,7 +45,7 @@ pub trait MsgRecver {
 pub trait MsgSender {
     type Message: serde::Serialize + serde::de::DeserializeOwned;
 
-    fn connect(addr: Addr) -> Self;
+    fn connect(addr: &Addr) -> Self;
     fn send_str(&mut self, s: &[u8]) -> Result<(), i32>;
     fn send(&mut self, msg: &Self::Message) -> Result<(), i32> {
         match serde_json::to_string(msg) {
@@ -108,7 +117,7 @@ impl<T> MsgSender for UdpSender<T> where
     T: serde::Serialize + serde::de::DeserializeOwned {
     type Message = T;
 
-    fn connect(addr: Addr) -> Self {
+    fn connect(addr: &Addr) -> Self {
         let sock = UdpSocket::bind("0.0.0.0:0").expect("failed to create socket");
         sock.set_nonblocking(true).expect("failed to set socket non_blocking");
         unsafe {
@@ -155,6 +164,25 @@ impl<'a, T> ZmqServer<'a, T> {
             msg_type: PhantomData,
         }
     }
+
+    pub fn get_sock(&self) -> &zmq::Socket {
+        &self.socket
+    }
+}
+
+impl<'a, T> ZmqServer<'a, T> where
+    T: serde::Serialize + serde::de::DeserializeOwned {
+    pub fn try_recv_timeout(&mut self, timeout_ms: i64) -> Option<T> {
+        let r;
+        {
+            r = self.socket.poll(zmq::POLLIN, timeout_ms);
+        }
+        if r.ok().map_or(false, |_| true) {
+            self.try_recv()
+        } else {
+            None
+        }
+    }
 }
 
 impl<'a, T> MsgRecver for ZmqServer<'a, T> where
@@ -181,10 +209,16 @@ pub struct ZmqClient<T> {
     msg_type: PhantomData<T>,
 }
 
+impl<T> ZmqClient<T> {
+    pub fn get_sock(&self) -> &zmq::Socket {
+        &self.socket
+    }
+}
+
 impl<T> MsgSender for ZmqClient<T> where
     T: serde::Serialize + serde::de::DeserializeOwned {
     type Message = T;
-    fn connect(addr: Addr) -> Self {
+    fn connect(addr: &Addr) -> Self {
         let ctx = zmq::Context::new();
         let sock = ctx.socket(zmq::ROUTER).expect("failed to create socket");
         let tcp_str = format!("tcp://{}:{}", addr.addr.as_str(), addr.port);

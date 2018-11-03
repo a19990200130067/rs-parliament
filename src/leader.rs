@@ -12,7 +12,21 @@ pub struct Leader<'a, CmdT> {
     server_id: ServerID,
 }
 
-impl <'a, CmdT> Leader<'a, CmdT> where
+impl<'a, CmdT> Leader<'a, CmdT> {
+    pub fn new(acceptors: &'a HashSet<ServerID>, replicas: &'a HashSet<ServerID>, my_id: ServerID) -> Self {
+        Leader {
+            acceptors: acceptors,
+            replicas: replicas,
+            waitfor: HashSet::new(),
+            is_active: false,
+            ballot: Ballot::zero(my_id),
+            proposals: HashMap::new(),
+            server_id: my_id,
+        }
+    }
+}
+
+impl<'a, CmdT> Leader<'a, CmdT> where
     CmdT: serde::Serialize + serde::de::DeserializeOwned + Clone {
     pub fn remove_before(&mut self, slot: u64) {
         // remove all proposals in range [0, slot)

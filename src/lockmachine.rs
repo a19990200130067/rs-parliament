@@ -1,18 +1,19 @@
 use std::collections::HashMap;
 use statemachine::*;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
 pub enum LockOp {
     TryLock(u64, u64),
     TryUnlock(u64, u64),
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub enum LockResult {
     Success,
     Fail,
 }
 
+#[derive(Default)]
 pub struct LockMachine {
     locks: HashMap<u64, u64>,
 }
@@ -26,11 +27,11 @@ impl StateMachine for LockMachine {
             LockOp::TryLock(lockid, cid) => {
                 let mut maybe_c: Option<u64>;
                 {
-                    maybe_c = locks.get(lockid).map(|c| *c);
+                    maybe_c = self.locks.get(lockid).map(|c| *c);
                 }
 
                 maybe_c.map_or_else(|| {
-                    locks.insert(*lockid, *cid);
+                    self.locks.insert(*lockid, *cid);
                     LockResult::Success
                 }, |c| {
                     if c == *cid {
@@ -43,14 +44,14 @@ impl StateMachine for LockMachine {
             LockOp::TryUnlock(lockid, cid) => {
                 let mut c: u64;
                 {
-                    let maybe_c = locks.get(lockid);
+                    let maybe_c = self.locks.get(lockid);
                     if maybe_c.is_none() {
                         return LockResult::Fail
                     }
                     c = maybe_c.unwrap().clone();
                 }
                 if c == *cid {
-                    locks.remove(lockid);
+                    self.locks.remove(lockid);
                     LockResult::Success
                 } else {
                     LockResult::Fail
