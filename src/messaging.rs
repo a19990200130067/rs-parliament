@@ -6,7 +6,7 @@ use std::os::unix::io::AsRawFd;
 use libc::c_int;
 use std::mem;
 
-#[derive(Clone, Serialize, Deserialize, Hash)]
+#[derive(Clone, Serialize, Deserialize, Hash, Debug)]
 pub struct Addr {
     pub addr: String,
     pub port: u16,
