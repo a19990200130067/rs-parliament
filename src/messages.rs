@@ -71,6 +71,8 @@ pub enum Message<CmdT, ResultT> {
     P1b { sender: ServerID, ballot: Ballot, proposals: Vec<(u64, Ballot, CmdT)> },
     P2a { sender: ServerID, ballot: Ballot, slot: u64, cmd: CmdT },
     P2b { sender: ServerID, ballot: Ballot, slot: u64 },
+
+    Tick,
 }
 
 /*

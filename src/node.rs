@@ -39,21 +39,24 @@ impl<'a, CmdT, ResultT> LeaderNode<'a, CmdT, ResultT> where
 
 impl<'a, CmdT, ResultT> Node for LeaderNode<'a, CmdT, ResultT> where
     CmdT: serde::Serialize + serde::de::DeserializeOwned + Clone + std::fmt::Debug,
-    ResultT: serde::Serialize + serde::de::DeserializeOwned + Clone {
+    ResultT: serde::Serialize + serde::de::DeserializeOwned + Clone + std::fmt::Debug {
     type PollItem = ();
     
     fn non_blocking_processing(&mut self) -> Result<(), i32> {
         let maybe_msg = self.server.try_recv_timeout(100);
-        maybe_msg.map_or(Err(-1), |msg| {
-            let to_send = self.leader.handle_msg(&msg);
-            to_send.into_iter().map(|(server_id, m)| {
-                self.server_addrs.get(&server_id).map(|addr| {
-                    let mut c = ZmqClient::connect(addr);
-                    c.send(&m);
-                });
-            }).collect::<()>();
-            Ok(())
-        })
+        let msg = maybe_msg.unwrap_or(Message::Tick);
+        let to_send = self.leader.handle_msg(&msg);
+        if to_send.len() > 0 {
+            println!("{} to_send {:?}", std::process::id(), to_send);
+        }
+        to_send.into_iter().map(|(server_id, m)| {
+            println!("{} sending to {} {:?}", std::process::id(), server_id, m);
+            self.server_addrs.get(&server_id).map(|addr| {
+                let mut c = ZmqClient::connect(addr);
+                c.send(&m);
+            });
+        }).collect::<()>();
+        Ok(())
     }
 }
 
@@ -66,7 +69,7 @@ pub struct AcceptorNode<'a, CmdT, ResultT> {
 
 impl<'a, CmdT, ResultT> AcceptorNode<'a, CmdT, ResultT> where
     CmdT: serde::Serialize + serde::de::DeserializeOwned + Clone + std::fmt::Debug,
-    ResultT: serde::Serialize + serde::de::DeserializeOwned + Clone {
+    ResultT: serde::Serialize + serde::de::DeserializeOwned + Clone + std::fmt::Debug {
     pub fn new(ctx: &'a zmq::Context, addr: &Addr,
                my_id: ServerID,
                server_addrs: &'a HashMap<ServerID, Addr>) -> Self {
@@ -80,7 +83,7 @@ impl<'a, CmdT, ResultT> AcceptorNode<'a, CmdT, ResultT> where
 
 impl<'a, CmdT, ResultT> Node for AcceptorNode<'a, CmdT, ResultT> where
     CmdT: serde::Serialize + serde::de::DeserializeOwned + Clone + std::fmt::Debug,
-    ResultT: serde::Serialize + serde::de::DeserializeOwned + Clone {
+    ResultT: serde::Serialize + serde::de::DeserializeOwned + Clone + std::fmt::Debug {
     type PollItem = ();
 
     fn non_blocking_processing(&mut self) -> Result<(), i32> {
@@ -108,7 +111,7 @@ pub struct ReplicaNode<'a, S: StateMachine> {
 impl<'a, S> ReplicaNode<'a, S> where
     S: StateMachine,
     S::Op: serde::Serialize + serde::de::DeserializeOwned + Clone + Eq + Hash + std::fmt::Debug,
-    S::Result: serde::Serialize + serde::de::DeserializeOwned + Clone {
+    S::Result: serde::Serialize + serde::de::DeserializeOwned + Clone + std::fmt::Debug{
     pub fn new(ctx: &'a zmq::Context, addr: &Addr,
                my_id: ServerID,
                server_addrs: &'a HashMap<ServerID, Addr>,
@@ -124,25 +127,24 @@ impl<'a, S> ReplicaNode<'a, S> where
 impl<'a, S> Node for ReplicaNode<'a, S> where
     S: StateMachine,
     S::Op: serde::Serialize + serde::de::DeserializeOwned + Clone + Eq + Hash + std::fmt::Debug,
-    S::Result: serde::Serialize + serde::de::DeserializeOwned + Clone {
+    S::Result: serde::Serialize + serde::de::DeserializeOwned + Clone + std::fmt::Debug {
     type PollItem = ();
 
     fn non_blocking_processing(&mut self) -> Result<(), i32> {
         let maybe_msg = self.server.try_recv_timeout(100);
-        maybe_msg.map_or(Err(-1), |msg| {
-            let (to_send_server, to_send_client) = self.replica.handle_msg(&msg);
-            to_send_server.into_iter().map(|(server_id, m)| {
-                self.server_addrs.get(&server_id).map(|addr| {
-                    let mut c = ZmqClient::connect(addr);
-                    c.send(&m);
-                });
-            }).collect::<()>();
-            to_send_client.into_iter().map(|(addr, m)| {
-                let mut c = ZmqClient::connect(&addr);
+        let msg = maybe_msg.unwrap_or(Message::Tick);
+        let (to_send_server, to_send_client) = self.replica.handle_msg(&msg);
+        to_send_server.into_iter().map(|(server_id, m)| {
+            self.server_addrs.get(&server_id).map(|addr| {
+                let mut c = ZmqClient::connect(addr);
                 c.send(&m);
-            }).collect::<()>();
-            Ok(())
-        })
+            });
+        }).collect::<()>();
+        to_send_client.into_iter().map(|(addr, m)| {
+            let mut c = ZmqClient::connect(&addr);
+            c.send(&m);
+        }).collect::<()>();
+        Ok(())
     }
 }
 
@@ -155,7 +157,7 @@ pub struct ClientNode<'a, S: StateMachine> {
 impl<'a, S> ClientNode<'a, S> where
     S: StateMachine,
     S::Op: serde::Serialize + serde::de::DeserializeOwned,
-    S::Result: serde::Serialize + serde::de::DeserializeOwned {
+    S::Result: serde::Serialize + serde::de::DeserializeOwned + std::fmt::Debug{
     pub fn new(ctx: &'a zmq::Context, addr: &Addr,
                replicas: &'a HashSet<Addr>) -> Self {
         ClientNode {
@@ -172,12 +174,18 @@ impl<'a, S> ClientNode<'a, S> where
         maybe_addr.map_or(Err(-1), |addr| {
             let mut c = ZmqClient::connect(addr);
             c.send(op);
+            loop {
             self.server.try_recv_timeout(1000).map_or(Err(-2), |msg| {
                 match msg {
-                    Message::Response { cid: _, result } => Ok(result),
+                    Message::Response { cid: _, result } => {
+                        println!("got result: {:?}", result);
+                        Ok(result)
+                    },
                     _ => Err(-3),
                 }
-            })
+            });
+            }
+            Err(-1)
         })
     }
 }

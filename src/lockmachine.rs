@@ -10,6 +10,7 @@ pub enum LockOp {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum LockResult {
     Success,
+    Owning,
     Fail,
 }
 
@@ -35,7 +36,7 @@ impl StateMachine for LockMachine {
                     LockResult::Success
                 }, |c| {
                     if c == *cid {
-                        LockResult::Success
+                        LockResult::Owning
                     } else {
                         LockResult::Fail
                     }

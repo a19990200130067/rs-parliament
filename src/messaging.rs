@@ -173,6 +173,7 @@ impl<'a, T> ZmqServer<'a, T> {
 impl<'a, T> ZmqServer<'a, T> where
     T: serde::Serialize + serde::de::DeserializeOwned {
     pub fn try_recv_timeout(&mut self, timeout_ms: i64) -> Option<T> {
+        return self.try_recv();
         let r;
         {
             r = self.socket.poll(zmq::POLLIN, timeout_ms);
@@ -193,7 +194,7 @@ impl<'a, T> MsgRecver for ZmqServer<'a, T> where
         self.socket.recv_multipart(zmq::DONTWAIT).ok().and_then(|mut msg| {
             if msg.len() == 3 {
                 String::from_utf8(msg[2].clone()).ok().map(|s| {
-                    println!("received: {}", s);
+                    //println!("{} received: {}", std::process::id(), s);
                 });
                 Some(msg.swap_remove(2).clone())
             } else {
@@ -233,6 +234,10 @@ impl<T> MsgSender for ZmqClient<T> where
     }
 
     fn send_str(&mut self, s: &[u8]) -> Result<(), i32> {
-        self.socket.send(s, zmq::DONTWAIT).map_err(|e| e as i32)
+        let ret = self.socket.send(s, zmq::DONTWAIT).map_err(|e| e as i32);
+        std::str::from_utf8(s).ok().map(|msg| {
+            println!("{} sent: {}", std::process::id(), msg);
+        });
+        ret
     }
 }

@@ -17,7 +17,8 @@ pub struct Replica<'a, S: StateMachine> {
 
 impl<'a, S> Replica<'a, S> where
     S: StateMachine,
-    S::Op: Clone + Eq + Hash + std::fmt::Debug {
+    S::Op: Clone + Eq + Hash + std::fmt::Debug,
+    S::Result: std::fmt::Debug {
 
     pub fn new(leaders: &'a HashSet<ServerID>) -> Self {
         Replica {
@@ -38,9 +39,10 @@ impl<'a, S> Replica<'a, S> where
         match msg {
             Message::Request { cid, cmd } => {
                 self.requests.insert((cid.clone(), cmd.clone()));
+                println!("{} requests: {:?}", std::process::id(), self.requests);
             },
             Message::Decision { slot, cmd } => {
-                println!("decided: {} {:?}", slot, cmd);
+                //println!("{} decided: {} {:?}", std::process::id(), slot, cmd);
                 self.log.insert(*slot, cmd.clone());
                 to_client.append(&mut self.try_perform());
             },
@@ -57,13 +59,15 @@ impl<'a, S> Replica<'a, S> where
             let log_ref = &self.log;
             let mut state = std::mem::replace(&mut self.state, S::init_state());
             let cont = log_ref.get(&slot_out).map(|op| {
+                println!("{}: applying {}", std::process::id(), slot_out);
                 let result = state.apply_op(op);
                 assert!(slot_out != std::u64::MAX, "slot number overflow");
-                slot_out += 1;
                 self.proposals.get(&slot_out).map(|(client, _)| {
+                    println!("{}: sending reply {:?}", std::process::id(), result);
                     let result_msg = Message::Response { cid: client.clone(), result: result };
                     ret.push((client.clone(), result_msg));
                 });
+                slot_out += 1;
             });
             self.state = state;
             self.slot_out = slot_out;
@@ -76,7 +80,7 @@ impl<'a, S> Replica<'a, S> where
                 let has_key = self.log.contains_key(slot);
                 if has_key {
                     // put the proposal back to requests set
-                    self.requests.insert((cid.clone(), op.clone()));
+                    //self.requests.insert((cid.clone(), op.clone()));
                 }
                 !has_key
             }).collect();
@@ -88,21 +92,25 @@ impl<'a, S> Replica<'a, S> where
         let upper_bound = self.slot_out + WINDOW;
         let mut ret: Vec<(ServerID, Message<S::Op, S::Result>)> = Vec::new();
         self.requests = requests.into_iter().filter(|(cid, op)| {
-            if self.slot_in < upper_bound {
+            let mut should_keep = true;
+            while self.slot_in < upper_bound {
                 if !self.log.contains_key(&self.slot_in) {
                     self.leaders.iter().map(|l| {
                         ret.push((l.clone(), Message::Propose { slot: self.slot_in, cmd: op.clone() }));
                     }).collect::<()>();
                     self.proposals.insert(self.slot_in, (cid.clone(), op.clone()));
-                    self.slot_in = self.slot_in + 1;
-                    true
-                } else {
-                    false
+                    should_keep = false;
                 }
-            } else {
-                false
+                self.slot_in = self.slot_in + 1;
+                if !should_keep {
+                    break;
+                }
             }
+            should_keep
         }).collect();
+        if self.requests.len() > 0 {
+            println!("{} requests after propose: {:?} {:?} {} {}", std::process::id(), self.requests, self.log, self.slot_in, self.slot_out);
+        }
         ret
     }
 }

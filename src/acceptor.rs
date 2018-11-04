@@ -8,7 +8,7 @@ pub struct Acceptor<CmdT> {
 }
 
 impl<CmdT> Acceptor<CmdT> where
-    CmdT: serde::Serialize + serde::de::DeserializeOwned + Clone {
+    CmdT: serde::Serialize + serde::de::DeserializeOwned + Clone + std::fmt::Debug {
     pub fn new(my_id: ServerID) -> Self {
         Acceptor {
             ballot: Ballot::bot(my_id),
@@ -24,10 +24,12 @@ impl<CmdT> Acceptor<CmdT> where
         }).collect();
     }
 
-    pub fn handle_msg<ResultT>(&mut self, msg: &Message<CmdT, ResultT>) -> Vec<(ServerID, Message<CmdT, ResultT>)> {
+    pub fn handle_msg<ResultT>(&mut self, msg: &Message<CmdT, ResultT>) -> Vec<(ServerID, Message<CmdT, ResultT>)> where
+        ResultT: std::fmt::Debug {
         let mut ret: Vec<(ServerID, Message<CmdT, ResultT>)> = Vec::new();
         match msg {
             Message::P1a { sender, ballot } => {
+                println!("{} got p1a: {:?}", std::process::id(), msg);
                 if *ballot > self.ballot {
                     self.ballot = ballot.clone();
                 }
