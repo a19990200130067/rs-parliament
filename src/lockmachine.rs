@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 use statemachine::*;
 
-#[derive(Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Debug)]
 pub enum LockOp {
     TryLock(u64, u64),
     TryUnlock(u64, u64),
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum LockResult {
     Success,
     Fail,

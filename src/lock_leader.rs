@@ -49,7 +49,7 @@ fn main() {
     let addr = Addr { addr: "127.0.0.1".to_string(), port: port.to_string().parse::<u16>().expect("parse port") };
     let idx = matches.value_of("IDX").expect("parse idx").to_string().parse::<ServerID>().unwrap();
 
-    println!("addr: {:?}, idx: {:?}", addr, idx);
+    println!("leader addr: {:?}, idx: {:?}, pid: {}", addr, idx, std::process::id());
 
     let mut leader = LeaderNode::<LockOp, LockResult>::new(&ctx, &addr, 
                                                            &acceptors, &replicas, idx, 

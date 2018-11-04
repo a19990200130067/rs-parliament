@@ -156,7 +156,6 @@ impl<'a, S> ClientNode<'a, S> where
     S::Op: serde::Serialize + serde::de::DeserializeOwned,
     S::Result: serde::Serialize + serde::de::DeserializeOwned {
     pub fn new(ctx: &'a zmq::Context, addr: &Addr,
-               my_id: ServerID,
                replicas: &'a HashSet<Addr>) -> Self {
         ClientNode {
             server: ZmqServer::bind(ctx, addr),
@@ -164,7 +163,7 @@ impl<'a, S> ClientNode<'a, S> where
         }
     }
 
-    pub fn send_cmd(&mut self, op: &S::Op) -> Result<S::Result, i32> {
+    pub fn send_cmd(&mut self, op: &Message<S::Op, S::Result>) -> Result<S::Result, i32> {
         let addr_vec = self.replicas.iter()
             .map(|a| a.clone())
             .collect::<Vec<_>>();
