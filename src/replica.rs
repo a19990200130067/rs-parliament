@@ -17,7 +17,7 @@ pub struct Replica<'a, S: StateMachine> {
 
 impl<'a, S> Replica<'a, S> where
     S: StateMachine,
-    S::Op: Clone + Eq + Hash {
+    S::Op: Clone + Eq + Hash + std::fmt::Debug {
 
     pub fn new(leaders: &'a HashSet<ServerID>) -> Self {
         Replica {
@@ -40,6 +40,7 @@ impl<'a, S> Replica<'a, S> where
                 self.requests.insert((cid.clone(), cmd.clone()));
             },
             Message::Decision { slot, cmd } => {
+                println!("decided: {} {:?}", slot, cmd);
                 self.log.insert(*slot, cmd.clone());
                 to_client.append(&mut self.try_perform());
             },

@@ -4,7 +4,7 @@ use messaging::Addr;
 pub type ClientID = Addr;
 pub type ServerID = u64;
 
-#[derive(Eq, PartialEq, Serialize, Deserialize, Clone)]
+#[derive(Eq, PartialEq, Serialize, Deserialize, Clone, Debug)]
 pub struct Ballot {
     pub server: ServerID,
     pub idx: u64,
@@ -58,7 +58,7 @@ impl Ord for Ballot {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub enum Message<CmdT, ResultT> {
     Request { cid: ClientID, cmd: CmdT },
     Response { cid: ClientID, result: ResultT },

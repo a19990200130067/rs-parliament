@@ -22,7 +22,8 @@ pub struct LeaderNode<'a, CmdT, ResultT> {
     server_addrs: &'a HashMap<ServerID, Addr>,
 }
 
-impl<'a, CmdT, ResultT> LeaderNode<'a, CmdT, ResultT> {
+impl<'a, CmdT, ResultT> LeaderNode<'a, CmdT, ResultT> where
+    CmdT: std::fmt::Debug {
     pub fn new(ctx: &'a zmq::Context, addr: &Addr, 
                acceptors: &'a HashSet<ServerID>,
                replica: &'a HashSet<ServerID>,
@@ -37,7 +38,7 @@ impl<'a, CmdT, ResultT> LeaderNode<'a, CmdT, ResultT> {
 }
 
 impl<'a, CmdT, ResultT> Node for LeaderNode<'a, CmdT, ResultT> where
-    CmdT: serde::Serialize + serde::de::DeserializeOwned + Clone,
+    CmdT: serde::Serialize + serde::de::DeserializeOwned + Clone + std::fmt::Debug,
     ResultT: serde::Serialize + serde::de::DeserializeOwned + Clone {
     type PollItem = ();
     
@@ -64,7 +65,7 @@ pub struct AcceptorNode<'a, CmdT, ResultT> {
 }
 
 impl<'a, CmdT, ResultT> AcceptorNode<'a, CmdT, ResultT> where
-    CmdT: serde::Serialize + serde::de::DeserializeOwned + Clone,
+    CmdT: serde::Serialize + serde::de::DeserializeOwned + Clone + std::fmt::Debug,
     ResultT: serde::Serialize + serde::de::DeserializeOwned + Clone {
     pub fn new(ctx: &'a zmq::Context, addr: &Addr,
                my_id: ServerID,
@@ -78,7 +79,7 @@ impl<'a, CmdT, ResultT> AcceptorNode<'a, CmdT, ResultT> where
 }
 
 impl<'a, CmdT, ResultT> Node for AcceptorNode<'a, CmdT, ResultT> where
-    CmdT: serde::Serialize + serde::de::DeserializeOwned + Clone,
+    CmdT: serde::Serialize + serde::de::DeserializeOwned + Clone + std::fmt::Debug,
     ResultT: serde::Serialize + serde::de::DeserializeOwned + Clone {
     type PollItem = ();
 
@@ -106,7 +107,7 @@ pub struct ReplicaNode<'a, S: StateMachine> {
 
 impl<'a, S> ReplicaNode<'a, S> where
     S: StateMachine,
-    S::Op: serde::Serialize + serde::de::DeserializeOwned + Clone + Eq + Hash,
+    S::Op: serde::Serialize + serde::de::DeserializeOwned + Clone + Eq + Hash + std::fmt::Debug,
     S::Result: serde::Serialize + serde::de::DeserializeOwned + Clone {
     pub fn new(ctx: &'a zmq::Context, addr: &Addr,
                my_id: ServerID,
@@ -122,7 +123,7 @@ impl<'a, S> ReplicaNode<'a, S> where
 
 impl<'a, S> Node for ReplicaNode<'a, S> where
     S: StateMachine,
-    S::Op: serde::Serialize + serde::de::DeserializeOwned + Clone + Eq + Hash,
+    S::Op: serde::Serialize + serde::de::DeserializeOwned + Clone + Eq + Hash + std::fmt::Debug,
     S::Result: serde::Serialize + serde::de::DeserializeOwned + Clone {
     type PollItem = ();
 

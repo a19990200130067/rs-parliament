@@ -192,6 +192,9 @@ impl<'a, T> MsgRecver for ZmqServer<'a, T> where
     fn try_recv_str(&mut self) -> Option<Vec<u8>> {
         self.socket.recv_multipart(zmq::DONTWAIT).ok().and_then(|mut msg| {
             if msg.len() == 3 {
+                String::from_utf8(msg[2].clone()).ok().map(|s| {
+                    println!("received: {}", s);
+                });
                 Some(msg.swap_remove(2).clone())
             } else {
                 None
@@ -220,7 +223,7 @@ impl<T> MsgSender for ZmqClient<T> where
     type Message = T;
     fn connect(addr: &Addr) -> Self {
         let ctx = zmq::Context::new();
-        let sock = ctx.socket(zmq::ROUTER).expect("failed to create socket");
+        let sock = ctx.socket(zmq::REQ).expect("failed to create socket");
         let tcp_str = format!("tcp://{}:{}", addr.addr.as_str(), addr.port);
         sock.connect(tcp_str.as_str()).expect("failed to bind");
         ZmqClient {
