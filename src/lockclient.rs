@@ -49,7 +49,8 @@ fn main() {
 
 
     let port = matches.value_of("PORT").expect("port num");
-    let addr = Addr { addr: "127.0.0.1".to_string(), port: port.to_string().parse::<u16>().expect("parse port") };
+    let port_num = port.to_string().parse::<u16>().expect("parse port");
+    let addr = Addr { addr: "127.0.0.1".to_string(), port: port_num };
 
     println!("addr: {:?}, pid: {}", addr, std::process::id());
 
@@ -58,7 +59,7 @@ fn main() {
     
     matches.subcommand_matches("lock").map(|m| {
         let lockid = m.value_of("LOCKID").expect("lock id arg").parse().expect("lock id parse");
-        let cmd = LockOp::TryLock(lockid, 0);
+        let cmd = LockOp::TryLock(lockid, port_num as u64);
         let req = Message::Request { cid: addr.clone(), cmd: cmd };
         client.send_cmd(&req).ok().map(|r| {
             println!("result: {:?}", r);
@@ -67,7 +68,7 @@ fn main() {
 
     matches.subcommand_matches("unlock").map(|m| {
         let lockid = m.value_of("LOCKID").expect("lock id arg").parse().expect("lock id parse");
-        let cmd = LockOp::TryUnlock(lockid, 0);
+        let cmd = LockOp::TryUnlock(lockid, port_num as u64);
         let req = Message::Request { cid: addr.clone(), cmd: cmd };
         client.send_cmd(&req).ok().map(|r| {
             println!("result: {:?}", r);

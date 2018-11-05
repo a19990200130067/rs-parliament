@@ -2,12 +2,12 @@
 
 BIN_DIR=./target/debug/
 
-unbuffer $BIN_DIR/lock_leader 9001 10 | tee leader-1.log all.log &
-unbuffer $BIN_DIR/lock_leader 9002 11 | tee leader-2.log all.log &
+unbuffer $BIN_DIR/lock_server leader 0 | tee leader-1.log all.log &
+unbuffer $BIN_DIR/lock_server leader 1 | tee leader-2.log all.log &
 
-unbuffer $BIN_DIR/lock_acceptor 9101 20 | tee acceptor-1.log all.log &
-unbuffer $BIN_DIR/lock_acceptor 9102 21 | tee acceptor-2.log all.log &
-unbuffer $BIN_DIR/lock_acceptor 9103 22 | tee acceptor-3.log all.log &
+unbuffer $BIN_DIR/lock_server acceptor 0 | tee acceptor-1.log all.log &
+unbuffer $BIN_DIR/lock_server acceptor 1 | tee acceptor-2.log all.log &
+unbuffer $BIN_DIR/lock_server acceptor 2 | tee acceptor-3.log all.log &
 
-unbuffer $BIN_DIR/lock_replica 8000 0 | tee replica-2.log all.log &
-unbuffer $BIN_DIR/lock_replica 8001 1 | tee replica-2.log all.log &
+unbuffer $BIN_DIR/lock_server replica 0 | tee replica-2.log all.log &
+unbuffer $BIN_DIR/lock_server replica 1 | tee replica-2.log all.log &
