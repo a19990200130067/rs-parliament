@@ -44,16 +44,16 @@ fn main() {
         .get_matches();
 
 
-    let ctx = zmq::Context::new();
     let port = matches.value_of("PORT").expect("port num");
     let addr = Addr { addr: "127.0.0.1".to_string(), port: port.to_string().parse::<u16>().expect("parse port") };
     let idx = matches.value_of("IDX").expect("parse idx").to_string().parse::<ServerID>().unwrap();
 
     println!("leader addr: {:?}, idx: {:?}, pid: {}", addr, idx, std::process::id());
 
-    let mut leader = LeaderNode::<LockOp, LockResult>::new(&ctx, &addr, 
-                                                           &acceptors, &replicas, idx, 
-                                                           &server_addrs);
+    let mut leader = LeaderNode::<LockOp, LockResult, 
+                                  UdpRecver<_>, UdpSender<_>>::new(&addr, 
+                                                                   &acceptors, &replicas, idx, 
+                                                                   &server_addrs);
     loop {
         let _ = leader.non_blocking_processing();
     }

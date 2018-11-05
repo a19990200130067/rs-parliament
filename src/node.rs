@@ -7,6 +7,7 @@ use leader::*;
 use replica::*;
 use acceptor::*;
 use statemachine::*;
+use std::marker::PhantomData;
 
 use rand::{thread_rng, Rng};
 
@@ -16,43 +17,49 @@ pub trait Node {
     fn non_blocking_processing(&mut self) -> Result<(), i32>;
 }
 
-pub struct LeaderNode<'a, CmdT, ResultT> {
-    server: ZmqServer<'a, Message<CmdT, ResultT>>,
+pub struct LeaderNode<'a, CmdT, ResultT, ServerT, ClientT> {
+    server: ServerT,
     leader: Leader<'a, CmdT>,
     server_addrs: &'a HashMap<ServerID, Addr>,
+    result_type: PhantomData<ResultT>,
+    client_type: PhantomData<ClientT>,
 }
 
-impl<'a, CmdT, ResultT> LeaderNode<'a, CmdT, ResultT> where
-    CmdT: std::fmt::Debug {
-    pub fn new(ctx: &'a zmq::Context, addr: &Addr, 
+impl<'a, CmdT, ResultT, ServerT, ClientT> LeaderNode<'a, CmdT, ResultT, ServerT, ClientT> where
+    CmdT: serde::Serialize + serde::de::DeserializeOwned + Clone + std::fmt::Debug,
+    ResultT: serde::Serialize + serde::de::DeserializeOwned + Clone + std::fmt::Debug,
+    ServerT: MsgRecver<Message<CmdT, ResultT>>,
+    ClientT: MsgSender<Message<CmdT, ResultT>> {
+    pub fn new(addr: &Addr, 
                acceptors: &'a HashSet<ServerID>,
                replica: &'a HashSet<ServerID>,
                my_id: ServerID,
                server_addrs: &'a HashMap<ServerID, Addr>) -> Self {
         LeaderNode {
-            server: ZmqServer::bind(ctx, addr),
+            server: ServerT::bind(addr),
             leader: Leader::new(acceptors, replica, my_id),
             server_addrs: server_addrs,
+            result_type: PhantomData,
+            client_type: PhantomData,
         }
     }
 }
 
-impl<'a, CmdT, ResultT> Node for LeaderNode<'a, CmdT, ResultT> where
+impl<'a, CmdT, ResultT, ServerT, ClientT> Node for LeaderNode<'a, CmdT, ResultT, ServerT, ClientT> where
     CmdT: serde::Serialize + serde::de::DeserializeOwned + Clone + std::fmt::Debug,
-    ResultT: serde::Serialize + serde::de::DeserializeOwned + Clone + std::fmt::Debug {
+    ResultT: serde::Serialize + serde::de::DeserializeOwned + Clone + std::fmt::Debug,
+    ServerT: MsgRecver<Message<CmdT, ResultT>>,
+    ClientT: MsgSender<Message<CmdT, ResultT>> {
     type PollItem = ();
     
     fn non_blocking_processing(&mut self) -> Result<(), i32> {
         let maybe_msg = self.server.try_recv_timeout(100);
         let msg = maybe_msg.unwrap_or(Message::Tick);
         let to_send = self.leader.handle_msg(&msg);
-        if to_send.len() > 0 {
-            println!("{} to_send {:?}", std::process::id(), to_send);
-        }
         to_send.into_iter().map(|(server_id, m)| {
-            println!("{} sending to {} {:?}", std::process::id(), server_id, m);
+            //println!("{} sending to {} {:?}", std::process::id(), server_id, m);
             self.server_addrs.get(&server_id).map(|addr| {
-                let mut c = ZmqClient::connect(addr);
+                let mut c = ClientT::connect(addr);
                 c.send(&m);
             });
         }).collect::<()>();
@@ -61,29 +68,37 @@ impl<'a, CmdT, ResultT> Node for LeaderNode<'a, CmdT, ResultT> where
 }
 
 
-pub struct AcceptorNode<'a, CmdT, ResultT> {
-    server: ZmqServer<'a, Message<CmdT, ResultT>>,
+pub struct AcceptorNode<'a, CmdT, ResultT, ServerT, ClientT> {
+    server: ServerT,
     acceptor: Acceptor<CmdT>,
     server_addrs: &'a HashMap<ServerID, Addr>,
+    result_type: PhantomData<ResultT>,
+    client_type: PhantomData<ClientT>,
 }
 
-impl<'a, CmdT, ResultT> AcceptorNode<'a, CmdT, ResultT> where
+impl<'a, CmdT, ResultT, ServerT, ClientT> AcceptorNode<'a, CmdT, ResultT, ServerT, ClientT> where
     CmdT: serde::Serialize + serde::de::DeserializeOwned + Clone + std::fmt::Debug,
-    ResultT: serde::Serialize + serde::de::DeserializeOwned + Clone + std::fmt::Debug {
-    pub fn new(ctx: &'a zmq::Context, addr: &Addr,
+    ResultT: serde::Serialize + serde::de::DeserializeOwned + Clone + std::fmt::Debug,
+    ServerT: MsgRecver<Message<CmdT, ResultT>>,
+    ClientT: MsgSender<Message<CmdT, ResultT>> {
+    pub fn new(addr: &Addr,
                my_id: ServerID,
                server_addrs: &'a HashMap<ServerID, Addr>) -> Self {
         AcceptorNode {
-            server: ZmqServer::bind(ctx, addr),
+            server: ServerT::bind(addr),
             acceptor: Acceptor::new(my_id),
             server_addrs: server_addrs,
+            result_type: PhantomData,
+            client_type: PhantomData,
         }
     }
 }
 
-impl<'a, CmdT, ResultT> Node for AcceptorNode<'a, CmdT, ResultT> where
+impl<'a, CmdT, ResultT, ServerT, ClientT> Node for AcceptorNode<'a, CmdT, ResultT, ServerT, ClientT> where
     CmdT: serde::Serialize + serde::de::DeserializeOwned + Clone + std::fmt::Debug,
-    ResultT: serde::Serialize + serde::de::DeserializeOwned + Clone + std::fmt::Debug {
+    ResultT: serde::Serialize + serde::de::DeserializeOwned + Clone + std::fmt::Debug,
+    ServerT: MsgRecver<Message<CmdT, ResultT>>,
+    ClientT: MsgSender<Message<CmdT, ResultT>> {
     type PollItem = ();
 
     fn non_blocking_processing(&mut self) -> Result<(), i32> {
@@ -92,7 +107,7 @@ impl<'a, CmdT, ResultT> Node for AcceptorNode<'a, CmdT, ResultT> where
             let to_send = self.acceptor.handle_msg::<ResultT>(&msg);
             to_send.into_iter().map(|(server_id, m)| {
                 self.server_addrs.get(&server_id).map(|addr| {
-                    let mut c = ZmqClient::connect(addr);
+                    let mut c = ClientT::connect(addr);
                     c.send(&m);
                 });
             }).collect::<()>();
@@ -102,32 +117,38 @@ impl<'a, CmdT, ResultT> Node for AcceptorNode<'a, CmdT, ResultT> where
 }
 
 
-pub struct ReplicaNode<'a, S: StateMachine> {
-    server: ZmqServer<'a, Message<S::Op, S::Result>>,
+pub struct ReplicaNode<'a, S: StateMachine, ServerT, ClientT> {
+    server: ServerT,
     replica: Replica<'a, S>,
     server_addrs: &'a HashMap<ServerID, Addr>,
+    client_type: PhantomData<ClientT>,
 }
 
-impl<'a, S> ReplicaNode<'a, S> where
+impl<'a, S, ServerT, ClientT> ReplicaNode<'a, S, ServerT, ClientT> where
     S: StateMachine,
     S::Op: serde::Serialize + serde::de::DeserializeOwned + Clone + Eq + Hash + std::fmt::Debug,
-    S::Result: serde::Serialize + serde::de::DeserializeOwned + Clone + std::fmt::Debug{
-    pub fn new(ctx: &'a zmq::Context, addr: &Addr,
+    S::Result: serde::Serialize + serde::de::DeserializeOwned + Clone + std::fmt::Debug,
+    ServerT: MsgRecver<Message<S::Op, S::Result>>,
+    ClientT: MsgSender<Message<S::Op, S::Result>> {
+    pub fn new(addr: &Addr,
                my_id: ServerID,
                server_addrs: &'a HashMap<ServerID, Addr>,
                leaders: &'a HashSet<ServerID>) -> Self {
         ReplicaNode {
-            server: ZmqServer::bind(ctx, addr),
+            server: ServerT::bind(addr),
             replica: Replica::new(leaders),
             server_addrs: server_addrs,
+            client_type: PhantomData,
         }
     }
 }
 
-impl<'a, S> Node for ReplicaNode<'a, S> where
+impl<'a, S, ServerT, ClientT> Node for ReplicaNode<'a, S, ServerT, ClientT> where
     S: StateMachine,
     S::Op: serde::Serialize + serde::de::DeserializeOwned + Clone + Eq + Hash + std::fmt::Debug,
-    S::Result: serde::Serialize + serde::de::DeserializeOwned + Clone + std::fmt::Debug {
+    S::Result: serde::Serialize + serde::de::DeserializeOwned + Clone + std::fmt::Debug,
+    ServerT: MsgRecver<Message<S::Op, S::Result>>,
+    ClientT: MsgSender<Message<S::Op, S::Result>> {
     type PollItem = ();
 
     fn non_blocking_processing(&mut self) -> Result<(), i32> {
@@ -136,12 +157,12 @@ impl<'a, S> Node for ReplicaNode<'a, S> where
         let (to_send_server, to_send_client) = self.replica.handle_msg(&msg);
         to_send_server.into_iter().map(|(server_id, m)| {
             self.server_addrs.get(&server_id).map(|addr| {
-                let mut c = ZmqClient::connect(addr);
+                let mut c = ClientT::connect(addr);
                 c.send(&m);
             });
         }).collect::<()>();
         to_send_client.into_iter().map(|(addr, m)| {
-            let mut c = ZmqClient::connect(&addr);
+            let mut c = ClientT::connect(&addr);
             c.send(&m);
         }).collect::<()>();
         Ok(())
@@ -149,20 +170,26 @@ impl<'a, S> Node for ReplicaNode<'a, S> where
 }
 
 
-pub struct ClientNode<'a, S: StateMachine> {
-    server: ZmqServer<'a, Message<S::Op, S::Result>>,
+pub struct ClientNode<'a, S: StateMachine, ServerT, ClientT> {
+    server: ServerT,
     replicas: &'a HashSet<Addr>,
+    state_machine_type: PhantomData<S>,
+    client_type: PhantomData<ClientT>,
 }
 
-impl<'a, S> ClientNode<'a, S> where
+impl<'a, S, ServerT, ClientT> ClientNode<'a, S, ServerT, ClientT> where
     S: StateMachine,
     S::Op: serde::Serialize + serde::de::DeserializeOwned,
-    S::Result: serde::Serialize + serde::de::DeserializeOwned + std::fmt::Debug{
-    pub fn new(ctx: &'a zmq::Context, addr: &Addr,
+    S::Result: serde::Serialize + serde::de::DeserializeOwned + std::fmt::Debug, 
+    ServerT: MsgRecver<Message<S::Op, S::Result>>,
+    ClientT: MsgSender<Message<S::Op, S::Result>> {
+    pub fn new(addr: &Addr,
                replicas: &'a HashSet<Addr>) -> Self {
         ClientNode {
-            server: ZmqServer::bind(ctx, addr),
+            server: ServerT::bind(addr),
             replicas: replicas,
+            state_machine_type: PhantomData,
+            client_type: PhantomData,
         }
     }
 
@@ -172,7 +199,7 @@ impl<'a, S> ClientNode<'a, S> where
             .collect::<Vec<_>>();
         let maybe_addr = thread_rng().choose(addr_vec.as_slice());
         maybe_addr.map_or(Err(-1), |addr| {
-            let mut c = ZmqClient::connect(addr);
+            let mut c = ClientT::connect(addr);
             c.send(op);
             loop {
             self.server.try_recv_timeout(1000).map_or(Err(-2), |msg| {

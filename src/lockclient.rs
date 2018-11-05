@@ -48,16 +48,17 @@ fn main() {
         .get_matches();
 
 
-    let ctx = zmq::Context::new();
     let port = matches.value_of("PORT").expect("port num");
     let addr = Addr { addr: "127.0.0.1".to_string(), port: port.to_string().parse::<u16>().expect("parse port") };
 
     println!("addr: {:?}, pid: {}", addr, std::process::id());
 
-    let mut client = ClientNode::<LockMachine>::new(&ctx, &addr, &replicas);
+    let mut client = ClientNode::<LockMachine, 
+                                  UdpRecver<_>, UdpSender<_>>::new(&addr, &replicas);
+    
     matches.subcommand_matches("lock").map(|m| {
         let lockid = m.value_of("LOCKID").expect("lock id arg").parse().expect("lock id parse");
-        let cmd = LockOp::TryLock(0, lockid);
+        let cmd = LockOp::TryLock(lockid, 0);
         let req = Message::Request { cid: addr.clone(), cmd: cmd };
         client.send_cmd(&req).ok().map(|r| {
             println!("result: {:?}", r);
@@ -66,7 +67,7 @@ fn main() {
 
     matches.subcommand_matches("unlock").map(|m| {
         let lockid = m.value_of("LOCKID").expect("lock id arg").parse().expect("lock id parse");
-        let cmd = LockOp::TryUnlock(0, lockid);
+        let cmd = LockOp::TryUnlock(lockid, 0);
         let req = Message::Request { cid: addr.clone(), cmd: cmd };
         client.send_cmd(&req).ok().map(|r| {
             println!("result: {:?}", r);

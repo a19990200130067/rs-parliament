@@ -42,8 +42,8 @@ impl<'a, S> Replica<'a, S> where
                 println!("{} requests: {:?}", std::process::id(), self.requests);
             },
             Message::Decision { slot, cmd } => {
-                //println!("{} decided: {} {:?}", std::process::id(), slot, cmd);
                 self.log.insert(*slot, cmd.clone());
+                println!("{} decided: {} {:?}", std::process::id(), slot, self.log);
                 to_client.append(&mut self.try_perform());
             },
             _ => (),
@@ -59,7 +59,7 @@ impl<'a, S> Replica<'a, S> where
             let log_ref = &self.log;
             let mut state = std::mem::replace(&mut self.state, S::init_state());
             let cont = log_ref.get(&slot_out).map(|op| {
-                println!("{}: applying {}", std::process::id(), slot_out);
+                println!("{}: applying {} {:?}", std::process::id(), slot_out, op);
                 let result = state.apply_op(op);
                 assert!(slot_out != std::u64::MAX, "slot number overflow");
                 self.proposals.get(&slot_out).map(|(client, _)| {

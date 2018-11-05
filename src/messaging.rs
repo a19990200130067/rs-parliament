@@ -29,25 +29,29 @@ impl PartialEq for Addr {
 
 impl Eq for Addr {}
 
-pub trait MsgRecver {
-    type Message: serde::Serialize + serde::de::DeserializeOwned;
+pub trait MsgRecver<Message> where
+    Message: serde::Serialize + serde::de::DeserializeOwned {
+    type Ctx;
     
+    fn bind(addr: &Addr) -> Self;
     fn try_recv_str(&mut self) -> Option<Vec<u8>>; // non-blocking
     fn get_io_fds(&self) -> Vec<c_int>;
 
-    fn try_recv(&mut self) -> Option<Self::Message> {
+    fn try_recv(&mut self) -> Option<Message> {
         self.try_recv_str().map_or(None, |msg_buf| {
             serde_json::from_reader(msg_buf.as_slice()).ok()
         })
     }
+
+    fn try_recv_timeout(&mut self, timeout_ms: i64) -> Option<Message>;
 }
 
-pub trait MsgSender {
-    type Message: serde::Serialize + serde::de::DeserializeOwned;
+pub trait MsgSender<Message> where 
+    Message: serde::Serialize + serde::de::DeserializeOwned {
 
     fn connect(addr: &Addr) -> Self;
     fn send_str(&mut self, s: &[u8]) -> Result<(), i32>;
-    fn send(&mut self, msg: &Self::Message) -> Result<(), i32> {
+    fn send(&mut self, msg: &Message) -> Result<(), i32> {
         match serde_json::to_string(msg) {
             Ok(s) => {
                 self.send_str(s.into_bytes().as_slice())
@@ -57,6 +61,11 @@ pub trait MsgSender {
     }
 }
 
+pub trait Messager {
+    type Message: serde::Serialize + serde::de::DeserializeOwned;
+    type Sender: MsgRecver<Self::Message>;
+    type Recver: MsgSender<Self::Message>;
+}
 
 pub struct UdpRecver<T> {
     sock: UdpSocket,
@@ -64,10 +73,17 @@ pub struct UdpRecver<T> {
 }
 
 impl<T> UdpRecver<T> {
-    pub fn bind(addr: Addr) -> Self {
+}
+
+impl<T> MsgRecver<T> for UdpRecver<T> where
+    T: serde::Serialize + serde::de::DeserializeOwned {
+    type Ctx = ();
+
+    fn bind(addr: &Addr) -> Self {
         let sock = UdpSocket::bind(format!("{}:{}", addr.addr, addr.port)).expect("failed to bind");
         sock.set_nonblocking(true).expect("failed to set socket non_blocking");
         unsafe {
+            /*
             let optval: libc::c_int = 1;
             let ret = libc::setsockopt(sock.as_raw_fd(),
                                        libc::SOL_SOCKET,
@@ -75,32 +91,37 @@ impl<T> UdpRecver<T> {
                                        &optval as *const _ as *const libc::c_void,
                                        mem::size_of_val(&optval) as libc::socklen_t);
             assert!(ret == 0, "failed to setsockopt");
+            */
         }
         UdpRecver {
             sock: sock,
             msg_type: PhantomData,
         }
     }
-}
 
-impl<T> MsgRecver for UdpRecver<T> where
-    T: serde::Serialize + serde::de::DeserializeOwned {
-    type Message = T;
     fn try_recv_str(&mut self) -> Option<Vec<u8>> {
         let mut v: Vec<u8> = Vec::with_capacity(1000);
         v.resize(1000, 0);
         let recv_result;
         {
-            recv_result = self.sock.recv_from(v.as_mut_slice());
+            recv_result = self.sock.recv(v.as_mut_slice());
         }
-        recv_result.ok().map(|(size, _addr)| {
-            v.truncate(size);
-            v
-        })
+        if recv_result.is_err() {
+            None
+        } else {
+            recv_result.ok().map(|size| {
+                v.truncate(size);
+                v
+            })
+        }
     }
 
     fn get_io_fds(&self) -> Vec<c_int> {
         vec![self.sock.as_raw_fd()]
+    }
+
+    fn try_recv_timeout(&mut self, timeout_ms: i64) -> Option<T> {
+        self.try_recv()
     }
 }
 
@@ -113,9 +134,8 @@ pub struct UdpSender<T> {
 impl<T> UdpSender<T> {
 }
 
-impl<T> MsgSender for UdpSender<T> where
+impl<T> MsgSender<T> for UdpSender<T> where
     T: serde::Serialize + serde::de::DeserializeOwned {
-    type Message = T;
 
     fn connect(addr: &Addr) -> Self {
         let sock = UdpSocket::bind("0.0.0.0:0").expect("failed to create socket");
@@ -140,55 +160,44 @@ impl<T> MsgSender for UdpSender<T> where
         assert!(s.len() < 1000, "message too large: {}", s.len());
         match self.sock.send_to(s, self.addr.clone()) {
             Ok(size) => 
-                if size == s.len() { Ok(()) } else { Err(-1) },
+                if size == s.len() { 
+                    Ok(())
+                } else { 
+                    Err(-1) 
+                },
             Err(e) => e.raw_os_error().map_or(Err(-1), |eno| Err(eno))
         }
     }
 }
 
 
-pub struct ZmqServer<'a, T> {
-    _ctx: &'a zmq::Context,
+pub struct ZmqServer<T> {
+    ctx: zmq::Context,
     socket: zmq::Socket,
     msg_type: PhantomData<T>,
 }
 
-impl<'a, T> ZmqServer<'a, T> {
-    pub fn bind(ctx: &'a zmq::Context, addr: &Addr) -> Self {
-        let sock = ctx.socket(zmq::ROUTER).expect("failed to create socket");
-        let tcp_str = format!("tcp://{}:{}", addr.addr.as_str(), addr.port);
-        sock.bind(tcp_str.as_str()).expect("failed to bind");
-        ZmqServer {
-            _ctx: ctx,
-            socket: sock,
-            msg_type: PhantomData,
-        }
-    }
-
+impl<T> ZmqServer<T> {
     pub fn get_sock(&self) -> &zmq::Socket {
         &self.socket
     }
 }
 
-impl<'a, T> ZmqServer<'a, T> where
+impl<T> MsgRecver<T> for ZmqServer<T> where
     T: serde::Serialize + serde::de::DeserializeOwned {
-    pub fn try_recv_timeout(&mut self, timeout_ms: i64) -> Option<T> {
-        return self.try_recv();
-        let r;
-        {
-            r = self.socket.poll(zmq::POLLIN, timeout_ms);
-        }
-        if r.ok().map_or(false, |_| true) {
-            self.try_recv()
-        } else {
-            None
+    type Ctx = zmq::Context;
+
+    fn bind(addr: &Addr) -> Self {
+        let ctx = zmq::Context::new();
+        let sock = ctx.socket(zmq::ROUTER).expect("failed to create socket");
+        let tcp_str = format!("tcp://{}:{}", addr.addr.as_str(), addr.port);
+        sock.bind(tcp_str.as_str()).expect("failed to bind");
+        ZmqServer {
+            ctx: ctx,
+            socket: sock,
+            msg_type: PhantomData,
         }
     }
-}
-
-impl<'a, T> MsgRecver for ZmqServer<'a, T> where
-    T: serde::Serialize + serde::de::DeserializeOwned {
-    type Message = T;
     
     fn try_recv_str(&mut self) -> Option<Vec<u8>> {
         self.socket.recv_multipart(zmq::DONTWAIT).ok().and_then(|mut msg| {
@@ -206,6 +215,19 @@ impl<'a, T> MsgRecver for ZmqServer<'a, T> where
     fn get_io_fds(&self) -> Vec<c_int> {
         Vec::new()
     }
+
+    fn try_recv_timeout(&mut self, timeout_ms: i64) -> Option<T> {
+        return self.try_recv();
+        let r;
+        {
+            r = self.socket.poll(zmq::POLLIN, timeout_ms);
+        }
+        if r.ok().map_or(false, |_| true) {
+            self.try_recv()
+        } else {
+            None
+        }
+    }
 }
 
 pub struct ZmqClient<T> {
@@ -219,9 +241,8 @@ impl<T> ZmqClient<T> {
     }
 }
 
-impl<T> MsgSender for ZmqClient<T> where
+impl<T> MsgSender<T> for ZmqClient<T> where
     T: serde::Serialize + serde::de::DeserializeOwned {
-    type Message = T;
     fn connect(addr: &Addr) -> Self {
         let ctx = zmq::Context::new();
         let sock = ctx.socket(zmq::REQ).expect("failed to create socket");

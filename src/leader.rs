@@ -51,7 +51,7 @@ impl<'a, CmdT> Leader<'a, CmdT> where
                     }).collect();
                     ret.append(&mut msgs);
                 }
-                println!("{}: proposals: {:?}", std::process::id(), self.proposals);
+                //println!("{}: proposals: {:?}", std::process::id(), self.proposals);
             },
             Message::P1b { sender, ballot, proposals } => {
                 if *ballot == self.ballot && !self.is_active {
@@ -72,10 +72,10 @@ impl<'a, CmdT> Leader<'a, CmdT> where
                         self.proposals.insert(slot, (v.1.clone(), self.acceptors.clone()));
                     }).collect::<()>();
                     self.waitfor.remove(sender);
-                    println!("waitfor of {}: {:?}", self.server_id, self.waitfor);
-                    if self.waitfor.len() < self.acceptors.len() / 2 {
+                    //println!("waitfor of {}: {:?}", self.server_id, self.waitfor);
+                    if self.waitfor.len() <= self.acceptors.len() / 2 {
                         // got majority vote
-                        println!("{} got majority vote", self.server_id);
+                        //println!("{} got majority vote", self.server_id);
                         self.waitfor.clear();
                         self.proposals.iter().map(|(slot, (cmd, _))| {
                             let mut msgs = self.acceptors.iter().map(|server| {
@@ -96,7 +96,7 @@ impl<'a, CmdT> Leader<'a, CmdT> where
                     let mut remove_entry = false;
                     proposals.get_mut(slot).map(|(cmd, waitfor)| {
                         waitfor.remove(sender);
-                        if waitfor.len() < self.acceptors.len() / 2 {
+                        if waitfor.len() <= self.acceptors.len() / 2 {
                             // can make decision, thus remove the entry
                             remove_entry = true;
                             let mut msgs = self.replicas.iter().map(|server| {
@@ -122,7 +122,7 @@ impl<'a, CmdT> Leader<'a, CmdT> where
                         let mut msgs = self.acceptors.iter().map(|server| {
                             (*server, Message::P1a { sender: self.server_id, ballot: self.ballot.clone() })
                         }).collect();
-                        println!("{} p1a : {:?}", std::process::id(), msgs);
+                        //println!("{} p1a : {:?}", std::process::id(), msgs);
                         ret.append(&mut msgs);
                         self.now = SystemTime::now();
                     }
