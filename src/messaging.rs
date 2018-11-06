@@ -6,6 +6,20 @@ use std::os::unix::io::AsRawFd;
 use libc::c_int;
 use std::mem;
 
+static mut CTX: Option<zmq::Context> = None;
+
+fn get_zmq_context() -> &'static zmq::Context {
+    unsafe {
+        if CTX.is_none() {
+            let ctx = zmq::Context::new();
+            CTX = Some(ctx);
+            get_zmq_context()
+        } else {
+            CTX.as_ref().unwrap()
+        }
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize, Hash, Debug)]
 pub struct Addr {
     pub addr: String,
@@ -83,7 +97,6 @@ impl<T> MsgRecver<T> for UdpRecver<T> where
         let sock = UdpSocket::bind(format!("{}:{}", addr.addr, addr.port)).expect("failed to bind");
         sock.set_nonblocking(true).expect("failed to set socket non_blocking");
         unsafe {
-            /*
             let optval: libc::c_int = 1;
             let ret = libc::setsockopt(sock.as_raw_fd(),
                                        libc::SOL_SOCKET,
@@ -91,7 +104,6 @@ impl<T> MsgRecver<T> for UdpRecver<T> where
                                        &optval as *const _ as *const libc::c_void,
                                        mem::size_of_val(&optval) as libc::socklen_t);
             assert!(ret == 0, "failed to setsockopt");
-            */
         }
         UdpRecver {
             sock: sock,
@@ -172,7 +184,7 @@ impl<T> MsgSender<T> for UdpSender<T> where
 
 
 pub struct ZmqServer<T> {
-    ctx: zmq::Context,
+    ctx: &'static zmq::Context,
     socket: zmq::Socket,
     msg_type: PhantomData<T>,
 }
@@ -188,7 +200,7 @@ impl<T> MsgRecver<T> for ZmqServer<T> where
     type Ctx = zmq::Context;
 
     fn bind(addr: &Addr) -> Self {
-        let ctx = zmq::Context::new();
+        let ctx = get_zmq_context();//zmq::Context::new();
         let sock = ctx.socket(zmq::ROUTER).expect("failed to create socket");
         let tcp_str = format!("tcp://{}:{}", addr.addr.as_str(), addr.port);
         sock.bind(tcp_str.as_str()).expect("failed to bind");
@@ -200,12 +212,12 @@ impl<T> MsgRecver<T> for ZmqServer<T> where
     }
     
     fn try_recv_str(&mut self) -> Option<Vec<u8>> {
-        self.socket.recv_multipart(zmq::DONTWAIT).ok().and_then(|mut msg| {
-            if msg.len() == 3 {
-                String::from_utf8(msg[2].clone()).ok().map(|s| {
-                    //println!("{} received: {}", std::process::id(), s);
+        self.socket.recv_multipart(0).ok().and_then(|mut msg| {
+            if msg.len() == 2 {
+                String::from_utf8(msg[1].clone()).ok().map(|s| {
+                    println!("{} received: {}", std::process::id(), s);
                 });
-                Some(msg.swap_remove(2).clone())
+                Some(msg.swap_remove(1).clone())
             } else {
                 None
             }
@@ -218,15 +230,6 @@ impl<T> MsgRecver<T> for ZmqServer<T> where
 
     fn try_recv_timeout(&mut self, timeout_ms: i64) -> Option<T> {
         return self.try_recv();
-        let r;
-        {
-            r = self.socket.poll(zmq::POLLIN, timeout_ms);
-        }
-        if r.ok().map_or(false, |_| true) {
-            self.try_recv()
-        } else {
-            None
-        }
     }
 }
 
@@ -244,10 +247,10 @@ impl<T> ZmqClient<T> {
 impl<T> MsgSender<T> for ZmqClient<T> where
     T: serde::Serialize + serde::de::DeserializeOwned {
     fn connect(addr: &Addr) -> Self {
-        let ctx = zmq::Context::new();
-        let sock = ctx.socket(zmq::REQ).expect("failed to create socket");
+        let ctx = get_zmq_context();//zmq::Context::new();
+        let sock = ctx.socket(zmq::DEALER).expect("failed to create socket");
         let tcp_str = format!("tcp://{}:{}", addr.addr.as_str(), addr.port);
-        sock.connect(tcp_str.as_str()).expect("failed to bind");
+        sock.connect(tcp_str.as_str()).expect("failed to connect");
         ZmqClient {
             socket: sock,
             msg_type: PhantomData,
@@ -255,7 +258,7 @@ impl<T> MsgSender<T> for ZmqClient<T> where
     }
 
     fn send_str(&mut self, s: &[u8]) -> Result<(), i32> {
-        let ret = self.socket.send(s, zmq::DONTWAIT).map_err(|e| e as i32);
+        let ret = self.socket.send(s, 0).map_err(|e| e as i32);
         std::str::from_utf8(s).ok().map(|msg| {
             println!("{} sent: {}", std::process::id(), msg);
         });
